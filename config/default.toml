@@ -1,0 +1,80 @@
+# Analysis overrides for default.xex (campaign + Zombies)
+# Title ID 41560855, version 0.0.0.8
+#
+# Every entry documents WHY it is needed, so it can be reviewed later.
+# Candidates come from tools/find_missing_funcs.py and are reviewed by hand:
+# SEH blocks (__except/__finally using r31 as frame) are NOT added here.
+
+# CRT setjmp/longjmp (tools/find_setjmp.py). The engine uses them in Com_Error to return
+# to the main loop after a recoverable error; without declaring them the recompiled code cannot
+# unwind the host stack and the game ends ("Execution complete") instead of recovering.
+#   setjmp : saves f14-f31, r1 (+0x90), r13-r31, CR (+0x130), LR (+0x134) and VMX to r3
+#   longjmp: r3 = jmp_buf, r4 = value; unwinds with 0x82603730 and restores
+setjmp_address = 0x825FB540
+longjmp_address = 0x825FB940
+
+# --- PPC -> x64 translation ---
+# Registers the generated code keeps in C++ local variables (PC CPU registers) instead of
+# the in-memory ctx structure. Only the ones that are safe for this game:
+#   skip_msr          : MSR was only used by the interrupt regions, already neutralized
+#   ctr_as_local      : CTR (loop counter / bctr target) never survives a call
+#   xer_as_local      : XER (carry/overflow) is volatile across calls
+#   reserved_as_local : the lwarx/stwcx. reservation always starts and ends in the same function
+#   cr_as_local       : condition registers
+# non_volatile_as_local and skip_lr are NOT enabled: setjmp/longjmp (Com_Error) and the SEH blocks
+# need r14-r31 and LR in ctx.
+skip_msr = true
+ctr_as_local = true
+xer_as_local = true
+reserved_as_local = true
+cr_as_local = true
+
+[functions]
+# 2-instruction leaf setter (stw r4,0x20(r3); blr) right after a bctr.
+# Only reached by a tail jump from 0x82442EA8; the analysis does not discover it.
+0x8239BE70 = { size = 8 }
+
+# --- Functions only referenced from vtables, with no branches from the code ---
+# Adjacent to the previous function, the analysis merged them into it.
+0x821B2EF0 = {}
+0x82211190 = {}
+0x82248558 = {}
+0x8250B6D0 = {}
+
+# 1-instruction thunk: b 0x8238CB90
+0x8239BC20 = { size = 4 }
+
+# vtable thunk (lwz/addi/lwz/lwz/mtctr/bctr). Runtime failure:
+# "Call to invalid or unregistered function at guest address 0x82507020"
+0x82507020 = { size = 24 }
+
+# --- 'this' adjustment thunks (multiple inheritance): addi r3,r3,-N ; b target ---
+0x824F7AE0 = { size = 8 }
+0x824FBA48 = { size = 8 }
+0x824FBA58 = { size = 8 }
+0x82501C50 = { size = 8 }
+0x82501C58 = { size = 8 }
+0x82501C60 = { size = 8 }
+0x82501C68 = { size = 8 }
+0x82501C70 = { size = 8 }
+0x82501C78 = { size = 8 }
+0x82501C88 = { size = 8 }
+0x82501C90 = { size = 8 }
+0x82501C98 = { size = 8 }
+0x82501CA0 = { size = 8 }
+0x82501CA8 = { size = 8 }
+0x82501CB0 = { size = 8 }
+0x82501F40 = { size = 8 }
+0x82501F48 = { size = 8 }
+0x82501F50 = { size = 8 }
+0x82507CE0 = { size = 8 }
+0x82508960 = { size = 8 }
+0x82508968 = { size = 8 }
+0x8251A5D0 = { size = 8 }
+
+
+
+
+
+
+

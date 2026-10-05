@@ -1,0 +1,13 @@
+# ReXGlue project manifest of the multiplayer executable (bo1mp.exe).
+# Paths are relative to this file. ../assets/default_mp_tu11.xex is the game's default_mp.xex
+# with Title Update #11 applied, dumped by the runtime itself (see README.md).
+
+[project]
+name = "bo1mp"
+sdk_version = "0.10.0"
+game_root = "../assets"
+
+[entrypoint]
+file_path = "../assets/default_mp_tu11.xex"
+out_directory_path = "generated/default_mp"
+includes = ["../config/default_mp_tu11.toml"]

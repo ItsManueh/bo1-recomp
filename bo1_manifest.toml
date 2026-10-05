@@ -1,0 +1,13 @@
+# ReXGlue project manifest of the campaign + Zombies executable (bo1.exe).
+# Paths are relative to this file. assets/default_tu11.xex is the game's default.xex with Title
+# Update #11 applied, dumped by the runtime itself (see README.md, "Preparing the game files").
+
+[project]
+name = "bo1"
+sdk_version = "0.10.0"
+game_root = "assets"
+
+[entrypoint]
+file_path = "assets/default_tu11.xex"
+out_directory_path = "generated/default"
+includes = ["config/default_tu11.toml"]

@@ -1,0 +1,14 @@
+# Bootstrap manifest of bo1mp.exe, built from the ORIGINAL default_mp.xex (no Title Update).
+# Only needed once, to build a bo1mp.exe that dumps assets/default_mp_tu11.xex (see README.md):
+# copy it over ../mp/bo1mp_manifest.toml, build, dump, then restore bo1mp_manifest.toml.
+# Paths are relative to the manifest (in mp/ once copied).
+
+[project]
+name = "bo1mp"
+sdk_version = "0.10.0"
+game_root = "../assets"
+
+[entrypoint]
+file_path = "../assets/default_mp.xex"
+out_directory_path = "generated/default_mp"
+includes = ["../config/default_mp.toml"]

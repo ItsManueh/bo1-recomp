@@ -1,0 +1,73 @@
+# Analysis overrides for default_mp.xex (multiplayer)
+# Title ID 41560855, version 0.0.0.8
+#
+# Same criteria as config/default.toml: every entry explains why it exists.
+
+# CRT setjmp/longjmp: same functions as in the campaign (0x825FB540 / 0x825FB940).
+setjmp_address = 0x8266CF90
+longjmp_address = 0x8266D360
+
+# --- PPC -> x64 translation: same options (and reasons) as config/default.toml ---
+skip_msr = true
+ctr_as_local = true
+xer_as_local = true
+reserved_as_local = true
+cr_as_local = true
+
+
+
+
+
+
+
+[functions]
+# Leaf setter (stw r4,0x20(r3); blr) after a bctr; only reached by a tail jump
+# from 0x824604B8. Equivalent to 0x8239BE70 of the campaign.
+0x823EA108 = { size = 8 }
+
+# --- Generated with tools/classify_candidates.py (same criteria as the campaign) ---
+# Only referenced from vtables; SEH blocks are left out:
+# dropped 0x8252BCF8 (SEH): mr r30, r3
+# dropped 0x8252D4CC (SEH): lwz r30, 0x7c(r31)
+# dropped 0x8252D644 (SEH): li r11, 0
+# dropped 0x8254F158 (SEH): lis r3, -0x7ff9
+# dropped 0x8256E648 (SEH): lis r3, -0x8000
+# dropped 0x82571120 (SEH): lis r11, -0x7ff9
+# dropped 0x82671090 (SEH): mr r8, r8
+# dropped 0x826762DC (SEH): lis r11, -0x4000
+# dropped 0x82676880 (SEH): mr r8, r8
+# dropped 0x82676AD4 (SEH): mr r8, r8
+# dropped 0x82678E38 (SEH): lwz r27, 0xcc(r31)
+# dropped 0x82678E58 (SEH): mr r8, r8
+# dropped 0x82678FB0 (SEH): bl 0x82676568
+# dropped 0x8267931C (SEH): bl 0x82676568
+# dropped 0x8267945C (SEH): bl 0x82676568
+# dropped 0x82679B3C (SEH): bl 0x82676568
+# dropped 0x82684F10 (DATA): ?
+0x821FFD58 = {}               # func: lhz r11, 0x29a(r3)
+0x823E9EB8 = { size = 4 }     # thunk: b 0x823db9c8
+0x8247D5D8 = {}               # func: lwz r11, 0x48(r3)
+0x82551298 = { size = 8 }     # thunk: addi r3, r3, -8
+0x825552E0 = { size = 8 }     # thunk: addi r3, r3, -4
+0x825552E8 = { size = 8 }     # thunk: addi r3, r3, -4
+0x825552F8 = { size = 8 }     # thunk: addi r3, r3, -4
+0x8255B248 = { size = 8 }     # thunk: addi r3, r3, -4
+0x8255B258 = { size = 8 }     # thunk: addi r3, r3, -4
+0x8255B260 = { size = 8 }     # thunk: addi r3, r3, -4
+0x8255B268 = { size = 8 }     # thunk: addi r3, r3, -4
+0x8255B538 = { size = 8 }     # thunk: addi r3, r3, -4
+0x8255B548 = { size = 8 }     # thunk: addi r3, r3, -4
+0x8255B550 = { size = 8 }     # thunk: addi r3, r3, -4
+0x8255B558 = { size = 8 }     # thunk: addi r3, r3, -4
+0x8255B560 = { size = 8 }     # thunk: addi r3, r3, -4
+0x8255B568 = { size = 8 }     # thunk: addi r3, r3, -4
+0x8255B570 = { size = 8 }     # thunk: addi r3, r3, -4
+0x8255B578 = { size = 8 }     # thunk: addi r3, r3, -4
+0x8255B580 = { size = 8 }     # thunk: addi r3, r3, -4
+0x8255B588 = { size = 8 }     # thunk: addi r3, r3, -4
+0x82560660 = { size = 24 }    # thunk: lwz r11, 0x48(r3)
+0x825611F8 = { size = 8 }     # thunk: addi r3, r3, -0x10
+0x82561E78 = { size = 8 }     # thunk: addi r3, r3, -0x24
+0x82561E80 = { size = 8 }     # thunk: addi r3, r3, -0x20
+0x82564C18 = {}               # func: lhz r11, 0x28(r3)
+0x82573C18 = { size = 8 }     # thunk: addi r3, r3, -4

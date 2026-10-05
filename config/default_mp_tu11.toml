@@ -1,0 +1,73 @@
+﻿# Analysis overrides for multiplayer (default_mp.xex) with Title Update #11 (version 0.0.11.8)
+# Title ID 41560855. The input XEX is the one the runtime dumps after applying the TU
+# (--bo1_dump_xex with default.xexp/default_mp.xexp in the game folder); see src/bo1_tu.cpp.
+#
+# Same criteria as config/default.toml (base version). Addresses change with the TU.
+
+# --- PPC -> x64 translation (see config/default.toml) ---
+skip_msr = true
+ctr_as_local = true
+xer_as_local = true
+reserved_as_local = true
+cr_as_local = true
+
+# --- setjmp/longjmp (tools/find_setjmp.py, verified) ---
+setjmp_address = 0x826b5450
+longjmp_address = 0x826b5820
+
+# No hooks inside the translated code: the port intercepts whole engine functions
+# (Com_Frame, Cbuf_AddText, Com_Error) by replacing their weak symbol; see src/bo1_engine.cpp.
+
+[functions]
+
+
+# Leaf setter (stw r4,0x20(r3); blr) after a bctr; only reached by a tail jump from 0x82461FD0.
+0x823EB008 = { size = 8 }
+# Function after a bctr, only reached by a tail jump from 0x8242882C.
+0x82428728 = {}
+
+# --- Generated with tools/classify_candidates.py (only referenced from vtables) ---
+# dropped 0x82570BC8 (SEH): mr r30, r3
+# dropped 0x8257239C (SEH): lwz r30, 0x7c(r31)
+# dropped 0x82572514 (SEH): li r11, 0
+# dropped 0x82593FF0 (SEH): lis r3, -0x7ff9
+# dropped 0x825B3678 (SEH): lis r3, -0x8000
+# dropped 0x825B5FD8 (SEH): lis r11, -0x7ff9
+# dropped 0x826BA890 (SEH): mr r8, r8
+# dropped 0x826BFC14 (SEH): mr r8, r8
+# dropped 0x826C151C (SEH): lis r11, -0x4000
+# dropped 0x826C1920 (SEH): mr r8, r8
+# dropped 0x826C4078 (SEH): lwz r27, 0xcc(r31)
+# dropped 0x826C4098 (SEH): mr r8, r8
+# dropped 0x826C41F0 (SEH): bl 0x826c17a8
+# dropped 0x826C455C (SEH): bl 0x826c17a8
+# dropped 0x826C469C (SEH): bl 0x826c17a8
+# dropped 0x826C4D7C (SEH): bl 0x826c17a8
+# dropped 0x826CFE48 (DATA): ?
+0x821F01C0 = {}               # func: lhz r11, 0x29a(r3)
+0x823EADB8 = { size = 4 }     # thunk: b 0x823dc810
+0x8247E5E0 = {}               # func: lwz r11, 0x48(r3)
+0x82596250 = { size = 8 }     # thunk: addi r3, r3, -8
+0x8259A198 = { size = 8 }     # thunk: addi r3, r3, -4
+0x8259A1A0 = { size = 8 }     # thunk: addi r3, r3, -4
+0x8259A1A8 = { size = 8 }     # thunk: addi r3, r3, -4
+0x8259A1B0 = { size = 8 }     # thunk: addi r3, r3, -4
+0x8259A1B8 = { size = 8 }     # thunk: addi r3, r3, -4
+0x8259A1C8 = { size = 8 }     # thunk: addi r3, r3, -4
+0x825A0118 = { size = 8 }     # thunk: addi r3, r3, -4
+0x825A0128 = { size = 8 }     # thunk: addi r3, r3, -4
+0x825A0130 = { size = 8 }     # thunk: addi r3, r3, -4
+0x825A0138 = { size = 8 }     # thunk: addi r3, r3, -4
+0x825A03E0 = { size = 8 }     # thunk: addi r3, r3, -4
+0x825A03E8 = { size = 8 }     # thunk: addi r3, r3, -4
+0x825A03F0 = { size = 8 }     # thunk: addi r3, r3, -4
+0x825A03F8 = { size = 8 }     # thunk: addi r3, r3, -4
+0x825A0400 = { size = 8 }     # thunk: addi r3, r3, -4
+0x825A0408 = { size = 8 }     # thunk: addi r3, r3, -4
+0x825A0410 = { size = 8 }     # thunk: addi r3, r3, -4
+0x825A5470 = { size = 24 }    # thunk: lwz r11, 0x48(r3)
+0x825A6100 = { size = 8 }     # thunk: addi r3, r3, -0x10
+0x825A6D88 = { size = 8 }     # thunk: addi r3, r3, -0x24
+0x825A6D90 = { size = 8 }     # thunk: addi r3, r3, -0x20
+0x825A9B20 = {}               # func: lhz r11, 0x28(r3)
+0x825B8AE0 = { size = 8 }     # thunk: addi r3, r3, -4

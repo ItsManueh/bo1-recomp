@@ -1,0 +1,14 @@
+# Bootstrap manifest of bo1.exe, built from the ORIGINAL default.xex (no Title Update).
+# Only needed once, to build a bo1.exe that dumps assets/default_tu11.xex (see README.md):
+# copy it over ../bo1_manifest.toml, build, dump, then restore bo1_manifest.toml.
+# Paths are relative to the manifest (in the project root once copied).
+
+[project]
+name = "bo1"
+sdk_version = "0.10.0"
+game_root = "assets"
+
+[entrypoint]
+file_path = "assets/default.xex"
+out_directory_path = "generated/default"
+includes = ["config/default.toml"]

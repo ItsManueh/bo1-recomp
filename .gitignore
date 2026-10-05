@@ -1,0 +1,23 @@
+# Never commit anything derived from the original game: its executables, data and the code
+# generated from it. Everyone builds the port from their own copy of the game.
+generated/default/
+mp/generated/default_mp/
+assets/
+*.xex
+*.xexp
+*.ff
+*.pak
+*.bik
+*.image.bin
+
+# Builds, local configuration and test output
+out/
+mp/out/
+build/
+CMakeUserPresets.json
+mp/CMakeUserPresets.json
+logs/
+*.log
+test_profile/
+tools/sampler/*.exe
+__pycache__/
