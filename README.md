@@ -179,6 +179,13 @@ Keys: **F1** developer console, **F2** overlay, **F12** screenshot.
 - `tools/xex_extract.py`, `tools/stfs.py`, `tools/ppcdis.py`: XEX and STFS extraction, PowerPC
   disassembly; the other scripts help find functions the analysis misses.
 
+## License
+
+The port's own code, configuration and tools in this repository are released under the
+[MIT License](LICENSE). The license does not cover the game: its executables, data and the code
+generated from them belong to their owners and are never part of this repository. The ReXGlue SDK
+fork keeps its own BSD 3-Clause license.
+
 ## Credits
 
 - [ReXGlue](https://github.com/rexglue/rexglue-sdk) (Tom Clay) and the
