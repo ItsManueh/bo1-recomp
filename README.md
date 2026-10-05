@@ -1,4 +1,4 @@
-# Call of Duty: Black Ops — static recompilation for PC
+# Call of Duty Black Ops (BO1) — static recompilation for PC
 
 A native Windows x64 port of the Xbox 360 version of *Call of Duty: Black Ops* (Title Update #11),
 built by statically recompiling the console's PowerPC executables to C++ with
