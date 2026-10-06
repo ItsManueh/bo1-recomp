@@ -24,7 +24,7 @@ The goal is preservation: keeping this version of the game playable on modern ha
 | Campaign | Starts and plays with cinematics; a full playthrough is still being verified |
 | Zombies | Plays, also in split screen |
 | Multiplayer | Local matches and split screen (2-4 players); online services do not exist anymore |
-| Performance | Locked 60 FPS with ~0.3-0.5 ms frame time variation (i5-9600K + GTX 1070) |
+| Performance | Locked 60 FPS with ~0.3-0.5 ms frame time variation; two player split screen at 58-60 FPS (i5-9600K + GTX 1070) |
 | Audio | Stereo, headphones (virtual surround), 5.1 and 7.1 |
 
 ## What the port adds
@@ -39,6 +39,11 @@ The goal is preservation: keeping this version of the game playable on modern ha
 - **Split screen**: players 2-4 sign in to their own local profile (own settings and saves) when
   their controller is connected; optional keyboard-and-mouse player; full width views; the
   emulated GPU thread is prioritized while several views are drawn.
+- **CPU and emulated GPU**: the game's threads sleep instead of polling for work (on the console
+  each had a hardware thread of its own), the GPU command lists run on a thread of their own,
+  vertices the game rewrites every frame are streamed to the GPU without memory protection, and
+  the runtime's GPU plugin can be built with profile-guided optimization. Plans for a native
+  renderer in the style of UnleashedRecomp: [docs/native-renderer.md](docs/native-renderer.md).
 - **Audio**: 5.1/7.1 output, a headphone virtualizer, measured output latency, subtitle option.
 - **Developer tools**: a developer console (F1) in its own window with performance, loading, engine
   state, dvar and achievement tabs; a compact overlay on the game (F2); screenshots (F12); named
@@ -88,6 +93,11 @@ cmake -S %USERPROFILE%\Tools\rexglue-src -B %USERPROFILE%\Tools\rexglue-build -G
 Then `tools\build_sdk.ps1` builds, installs and copies the runtime DLLs next to the game. It reuses
 the `rexglue.exe` recompiler of the official v0.10.0 release, unpacked in
 `%USERPROFILE%\Tools\rexglue-sdk\win-amd64`.
+
+Optionally, once the game runs (step 5), `tools\build_sdk_pgo.ps1` rebuilds the SDK's GPU plugin
+with profile-guided optimization: it builds an instrumented copy, plays a short training session
+(split screen, a campaign mission and Zombies) and rebuilds with the recorded profile (~2 FPS more
+in split screen).
 
 Point the game project at the installed SDK with a `CMakeUserPresets.json` (in the project root
 and in `mp/`):
@@ -173,7 +183,8 @@ that file; the main ones:
 | `bo1_split_screen` | `true` | local profiles for players 2-4 |
 | `bo1_keyboard_player` | `shared` | `shared` or `own` (keyboard/mouse is its own player) |
 | `bo1_split_screen_view` | `console` | `console` (side bars) or `full` |
-| `bo1_split_screen_boost` | `true` | higher priority for the emulated GPU thread in split screen |
+| `bo1_split_screen_boost` | `true` | higher priority for the emulated GPU threads in split screen |
+| `bo1_idle_sleep` | `true` | game threads sleep while they wait for work instead of polling |
 | `bo1_gamertag` / `bo1_player_names` | Windows user | names of player 1 and players 2-4 |
 | `bo1_console_window` | `true` | developer console in its own window (`false`: over the game) |
 | `bo1_skip_intro` | `false` | skip the logo video at startup |
@@ -184,6 +195,7 @@ Keys: **F1** developer console, **F2** overlay, **F11** fullscreen, **F12** scre
 
 - `tools/run.ps1`: automated test runs (logs, timed screenshots, console commands such as
   `press <player> <button>` to drive the menus); uses a separate test profile.
+- `tools/build_sdk_pgo.ps1`: profile-guided optimization of the SDK's GPU plugin.
 - `tools/split_test.ps1`, `tools/split_ab.ps1`, `tools/split_profile.ps1`: a two player split screen
   match driven through the menus with virtual controllers (`--bo1_test_pads`), interleaved A/B
   comparisons and a profile of the emulated GPU thread.
