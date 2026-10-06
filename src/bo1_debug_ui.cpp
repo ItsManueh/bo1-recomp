@@ -27,6 +27,7 @@
 #include "bo1_audio.h"
 #include "bo1_debug.h"
 #include "bo1_engine.h"
+#include "bo1_players.h"
 #include "bo1_settings.h"
 
 #ifndef WIN32_LEAN_AND_MEAN
@@ -242,13 +243,27 @@ class DeveloperUi final : public rex::ui::ImGuiDialog {
   // --- Compact overlay (F2) ------------------------------------------------------------------------
 
   void DrawOverlay() {
+    constexpr ImGuiWindowFlags kOverlayFlags =
+        ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize |
+        ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoSavedSettings |
+        ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav;
+    FrameStats frames = GetFrameStats();
+    if (players::ViewCount() >= 2) {
+      // Split screen: the full panel would cover the left black bar and the top player's view
+      // (the minimap is there), making the picture look off center. Only the frame rate, small
+      // enough to fit inside the bar.
+      ImGui::SetNextWindowPos(ImVec2(4, 4), ImGuiCond_Always);
+      ImGui::SetNextWindowBgAlpha(0.35f);
+      ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(4, 2));
+      ImGui::Begin("##bo1_overlay_split", nullptr, kOverlayFlags);
+      ImGui::TextColored(FpsColor(frames.fps), "%.0f FPS", frames.fps);
+      ImGui::End();
+      ImGui::PopStyleVar();
+      return;
+    }
     ImGui::SetNextWindowPos(ImVec2(8, 8), ImGuiCond_Always);
     ImGui::SetNextWindowBgAlpha(0.55f);
-    ImGui::Begin("##bo1_overlay", nullptr,
-                 ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize |
-                     ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoSavedSettings |
-                     ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav);
-    FrameStats frames = GetFrameStats();
+    ImGui::Begin("##bo1_overlay", nullptr, kOverlayFlags);
     ImGui::TextColored(FpsColor(frames.fps), "%.0f FPS", frames.fps);
     ImGui::SameLine();
     ImGui::Text("%.1f ms  jitter %.2f  worst %.1f  1%% low %.0f", frames.avg_ms,

@@ -7,6 +7,7 @@
 
 #include "bo1_players.h"
 
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <chrono>
@@ -109,7 +110,14 @@ const std::vector<HANDLE>& GpuThreads() {
 
 }  // namespace
 
+namespace {
+std::atomic<int> g_view_count{1};
+}  // namespace
+
+int ViewCount() { return g_view_count.load(std::memory_order_relaxed); }
+
 void OnViewCount(int views) {
+  g_view_count.store(std::max(views, 1), std::memory_order_relaxed);
   static int boosted = -1;  // unknown
   const int want = REXCVAR_GET(bo1_split_screen_boost) && views >= 2 ? 1 : 0;
   if (want == boosted) return;

@@ -31,6 +31,9 @@ std::vector<std::string> EngineCommands();
 // while split screen is on, the emulated GPU command thread gets the highest priority.
 void OnViewCount(int views);
 
+// Views the engine draws (1, or 2-4 in split screen), as last reported to OnViewCount.
+int ViewCount();
+
 // Debug/test input: holds a controller button of a player (0-3) for hold_ms milliseconds, on top of
 // whatever the real controller does. Buttons: a b x y start back up down left right lb rb ls rs lt
 // rt. Returns false for an unknown button or player.
