@@ -21,3 +21,6 @@ logs/
 test_profile/
 tools/sampler/*.exe
 __pycache__/
+
+# Profile-guided optimization data (tools/build_sdk_pgo.ps1)
+pgo/

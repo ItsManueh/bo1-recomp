@@ -2,7 +2,7 @@
 # both players are in the match, samples the "GPU Commands" thread with tools\sampler.
 # Usage: powershell -ExecutionPolicy Bypass -File tools\split_profile.ps1 -Name t_prof [-At 150]
 #        [-Seconds 15] [-Extra "..."] [-Threads "GPU Commands"]
-#   -Threads  thread names for the sampler, separated by commas ("-" = every thread above 5%)
+#   -Threads  thread names for the sampler, separated by commas ("all" = every thread above 5%)
 param(
     [string]$Name = 'split_profile',
     [int]$At = 150,
@@ -11,6 +11,8 @@ param(
     [string]$Threads = 'GPU Commands'
 )
 $root = Split-Path $PSScriptRoot -Parent
+# "-" (the sampler's "every thread") cannot be passed through -File: it reads as a parameter name.
+if ($Threads -eq 'all') { $Threads = '-' }
 $job = Start-Job -ScriptBlock {
     param($script, $name, $extra)
     & $script -Name $name -Seconds 200 -Shots '190' -Extra $extra
