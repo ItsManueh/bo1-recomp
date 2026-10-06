@@ -32,15 +32,17 @@ The goal is preservation: keeping this version of the game playable on modern ha
 - **Frame pacing**: a precise 60 FPS limiter (the console's vsync is uneven under emulation),
   optional PC vsync and variable refresh rate (G-Sync/FreeSync); multiplayer always runs at the
   common 60 Hz so every player simulates movement the same way.
-- **Graphics**: internal resolution x1-x3, FSR 1 / CAS upscaling, 16:9 or 4:3, SMAA (including an
+- **Graphics**: native rendering resolutions (console 960x544, 1080p, 1440p, 4K or matched to the
+  monitor), FSR 1 / CAS upscaling, 16:9 or 4:3, borderless fullscreen (F11), SMAA (including an
   ultra preset with color edge detection), 16x anisotropic filtering, higher quality shadows and
-  level of detail.
+  level of detail, correct light flares (real occlusion queries).
 - **Split screen**: players 2-4 sign in to their own local profile (own settings and saves) when
   their controller is connected; optional keyboard-and-mouse player; full width views; the
   emulated GPU thread is prioritized while several views are drawn.
 - **Audio**: 5.1/7.1 output, a headphone virtualizer, measured output latency, subtitle option.
-- **Developer tools**: an in-game developer console (F1) with performance, loading, engine state
-  and dvar tabs; a compact overlay (F2); screenshots (F12).
+- **Developer tools**: a developer console (F1) in its own window with performance, loading, engine
+  state and dvar tabs; a compact overlay on the game (F2); screenshots (F12); named game functions
+  (`config/symbols_*.toml`) in the profiling reports.
 - **Kernel/system**: saves and profile in *Saved Games*, campaign <-> multiplayer switching,
   DLC installation, file streaming diagnostics, many fixes in the runtime.
 
@@ -153,7 +155,7 @@ that file; the main ones:
 
 | Option | Default | |
 |---|---|---|
-| `bo1_internal_resolution` | `1` | 1 = console (960x544), 2, 3 |
+| `bo1_resolution` | `console` | `console` (960x544), `1080p`, `1440p`, `4k`, `auto` (monitor) |
 | `bo1_antialiasing` | `smaa_ultra` | `smaa_ultra`, `smaa`, `fxaa`, `off` |
 | `bo1_upscaler` | `fsr` | `fsr`, `cas`, `bilinear` |
 | `bo1_aspect_ratio` | `16:9` | `16:9`, `4:3` |
@@ -166,9 +168,11 @@ that file; the main ones:
 | `bo1_split_screen` | `true` | local profiles for players 2-4 |
 | `bo1_keyboard_player` | `shared` | `shared` or `own` (keyboard/mouse is its own player) |
 | `bo1_split_screen_view` | `console` | `console` (side bars) or `full` |
+| `bo1_split_screen_boost` | `true` | higher priority for the emulated GPU thread in split screen |
 | `bo1_gamertag` / `bo1_player_names` | Windows user | names of player 1 and players 2-4 |
+| `bo1_console_window` | `true` | developer console in its own window (`false`: over the game) |
 
-Keys: **F1** developer console, **F2** overlay, **F12** screenshot.
+Keys: **F1** developer console, **F2** overlay, **F11** fullscreen, **F12** screenshot.
 
 ## Tools
 
@@ -176,6 +180,10 @@ Keys: **F1** developer console, **F2** overlay, **F12** screenshot.
   `press <player> <button>` to drive the menus); uses a separate test profile.
 - `tools/sampler/`: sampling profiler; `tools/stutter_report.py` crosses its samples with the
   hitches in the log.
+- `tools/campaign_sweep.ps1` + `tools/campaign_report.py`: loads every campaign mission and
+  summarizes errors, frame rate and hitches.
+- `tools/name_functions.py`: names game functions from the executable (error messages, script
+  builtin and console command tables) into `config/symbols_tu11.toml` / `symbols_mp_tu11.toml`.
 - `tools/xex_extract.py`, `tools/stfs.py`, `tools/ppcdis.py`: XEX and STFS extraction, PowerPC
   disassembly; the other scripts help find functions the analysis misses.
 

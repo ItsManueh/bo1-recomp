@@ -1,4 +1,5 @@
-// bo1 - in-game developer UI: the developer console window (F1) and the compact overlay (F2)
+// bo1 - developer UI: the developer console (F1), in its own window next to the game window, and
+// the compact overlay (F2) on top of the game image
 
 #include <algorithm>
 #include <atomic>
@@ -6,13 +7,21 @@
 #include <chrono>
 #include <cstdio>
 #include <cstring>
+#include <memory>
 #include <string>
 #include <vector>
 
 #include <imgui.h>
 #include <rex/audio/downmix.h>
 #include <rex/logging.h>
+#include <rex/ui/graphics_provider.h>
 #include <rex/ui/imgui_dialog.h>
+#include <rex/ui/imgui_drawer.h>
+#include <rex/ui/immediate_drawer.h>
+#include <rex/ui/presenter.h>
+#include <rex/ui/window.h>
+#include <rex/ui/window_listener.h>
+#include <rex/ui/windowed_app_context.h>
 
 #include "bo1_audio.h"
 #include "bo1_debug.h"
@@ -173,11 +182,17 @@ constexpr const char* kWatchedDvars[] = {
 
 // --- Window ----------------------------------------------------------------------------------------
 
+bool ConsoleInOwnWindow();
+void RequestConsoleWindowVisibility();
+
 class DeveloperUi final : public rex::ui::ImGuiDialog {
  public:
-  DeveloperUi(rex::ui::ImGuiDrawer* drawer, const char* title)
-      : ImGuiDialog(drawer), title_(title) {
-    g_overlay_visible = REXCVAR_GET(bo1_overlay);
+  // console_window: the dialog of the separate console window (draws only the console, filling the
+  // window); otherwise the one of the game window (overlay, and the console when it has no window
+  // of its own).
+  DeveloperUi(rex::ui::ImGuiDrawer* drawer, const char* title, bool console_window)
+      : ImGuiDialog(drawer), title_(title), console_window_(console_window) {
+    if (!console_window_) g_overlay_visible = REXCVAR_GET(bo1_overlay);
     min_level_ = LevelFromName(REXCVAR_GET(bo1_console_level));
   }
 
@@ -190,9 +205,16 @@ class DeveloperUi final : public rex::ui::ImGuiDialog {
 
  protected:
   void OnDraw(ImGuiIO& io) override {
-    PollLog();
-    if (g_overlay_visible && !g_console_open) DrawOverlay();
-    if (g_console_open) {
+    if (console_window_) {
+      PollLog();
+      ScopedTheme theme;
+      DrawConsole(io);
+      return;
+    }
+    const bool console_here = g_console_open && !ConsoleInOwnWindow();
+    if (console_here) PollLog();
+    if (g_overlay_visible && !console_here) DrawOverlay();
+    if (console_here) {
       ScopedTheme theme;
       DrawConsole(io);
     }
@@ -256,19 +278,30 @@ class DeveloperUi final : public rex::ui::ImGuiDialog {
   // --- Developer console (F1) ----------------------------------------------------------------------
 
   void DrawConsole(ImGuiIO& io) {
-    if (just_opened_) {
+    bool open = true;
+    std::string window_title = std::string(title_) + " - Developer Console###bo1_console";
+    ImGuiWindowFlags flags = ImGuiWindowFlags_NoCollapse;
+    if (console_window_) {
+      // The whole native window is the console.
+      ImGui::SetNextWindowPos(ImVec2(0, 0));
+      ImGui::SetNextWindowSize(io.DisplaySize);
+      flags |= ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
+               ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBringToFrontOnFocus;
+    } else if (just_opened_) {
       ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x * 0.05f, io.DisplaySize.y * 0.05f),
                               ImGuiCond_Appearing);
       ImGui::SetNextWindowSize(ImVec2(io.DisplaySize.x * 0.9f, io.DisplaySize.y * 0.75f),
                                ImGuiCond_Appearing);
     }
-    bool open = true;
-    std::string window_title = std::string(title_) + " - Developer Console###bo1_console";
-    if (!ImGui::Begin(window_title.c_str(), &open, ImGuiWindowFlags_NoCollapse)) {
+    if (!ImGui::Begin(window_title.c_str(), console_window_ ? nullptr : &open, flags)) {
       ImGui::End();
       return;
     }
-    if (!open || ImGui::IsKeyPressed(ImGuiKey_Escape)) g_console_open = false;
+    if (!open || ImGui::IsKeyPressed(ImGuiKey_Escape) ||
+        (console_window_ && ImGui::IsKeyPressed(ImGuiKey_F1))) {
+      g_console_open = false;
+      if (console_window_) RequestConsoleWindowVisibility();
+    }
     DrawHeader();
     using DrawTab = void (DeveloperUi::*)();
     static const DrawTab kDrawTabs[] = {&DeveloperUi::DrawConsoleTab,
@@ -729,6 +762,8 @@ class DeveloperUi final : public rex::ui::ImGuiDialog {
   std::vector<bool> toggles_, toggle_exists_;
   std::string watched_map_ = "-";
 
+  const bool console_window_;
+
   // Dvars tab.
   char dvar_filter_[64] = {};
   std::vector<engine::DvarInfo> dvars_;
@@ -738,18 +773,173 @@ class DeveloperUi final : public rex::ui::ImGuiDialog {
 
 DeveloperUi* g_ui = nullptr;
 
+// --- Separate console window ---------------------------------------------------------------------
+
+// The developer console in a native window of its own (created the first time it is opened), so
+// it can sit on a second monitor or next to the game without covering it. Closing it only hides
+// it; while hidden its dialog is detached and the window is not painted.
+class ConsoleWindow final : public rex::ui::WindowListener {
+ public:
+  ConsoleWindow(rex::ui::WindowedAppContext& app_context, rex::ui::GraphicsProvider& provider,
+                std::string title)
+      : app_context_(app_context), provider_(provider), title_(std::move(title)) {}
+  ~ConsoleWindow() override { Destroy(); }
+
+  // UI thread.
+  bool Create() {
+    const std::string window_title = title_ + " - Developer Console";
+    window_ = rex::ui::Window::Create(app_context_, window_title, 1180, 760);
+    if (!window_) return false;
+    window_->AddListener(this);
+    if (!window_->Open()) return false;
+    presenter_ = provider_.CreatePresenter();
+    immediate_drawer_ = provider_.CreateImmediateDrawer();
+    if (!presenter_ || !immediate_drawer_) return false;
+    immediate_drawer_->SetPresenter(presenter_.get());
+    window_->SetPresenter(presenter_.get());
+    imgui_drawer_ = std::make_unique<rex::ui::ImGuiDrawer>(window_.get(), 64);
+    imgui_drawer_->SetPresenterAndImmediateDrawer(presenter_.get(), immediate_drawer_.get());
+    dialog_ = std::make_unique<DeveloperUi>(imgui_drawer_.get(), title_.c_str(), true);
+    hwnd_ = FindOwnWindow(window_title);
+    visible_ = true;
+    REXLOG_INFO("bo1: developer console window opened");
+    return hwnd_ != nullptr;
+  }
+
+  // UI thread.
+  void SetVisible(bool visible) {
+    if (!hwnd_ || visible == visible_) return;
+    visible_ = visible;
+    if (visible) {
+      imgui_drawer_->AddDialog(dialog_.get());
+      ShowWindow(hwnd_, SW_SHOWNORMAL);
+      SetForegroundWindow(hwnd_);
+    } else {
+      imgui_drawer_->RemoveDialog(dialog_.get());
+      ShowWindow(hwnd_, SW_HIDE);
+    }
+  }
+
+  DeveloperUi* dialog() const { return dialog_.get(); }
+
+  // UI thread. Same teardown order as the game window's.
+  void Destroy() {
+    dialog_.reset();
+    if (imgui_drawer_) {
+      imgui_drawer_->SetPresenterAndImmediateDrawer(nullptr, nullptr);
+      imgui_drawer_.reset();
+    }
+    if (immediate_drawer_) {
+      immediate_drawer_->SetPresenter(nullptr);
+      immediate_drawer_.reset();
+    }
+    if (window_) {
+      window_->RemoveListener(this);
+      window_->SetPresenter(nullptr);
+    }
+    presenter_.reset();
+    window_.reset();
+    hwnd_ = nullptr;
+  }
+
+  // The close button hides the window; the console opens again with F1.
+  bool OnCloseRequested(rex::ui::UIEvent&) override {
+    g_console_open = false;
+    SetVisible(false);
+    return false;
+  }
+
+ private:
+  static HWND FindOwnWindow(const std::string& title) {
+    struct Search {
+      std::wstring title;
+      HWND found = nullptr;
+    } search;
+    search.title.assign(title.begin(), title.end());
+    EnumWindows(
+        [](HWND hwnd, LPARAM param) -> BOOL {
+          auto* search = reinterpret_cast<Search*>(param);
+          DWORD pid = 0;
+          GetWindowThreadProcessId(hwnd, &pid);
+          if (pid != GetCurrentProcessId()) return TRUE;
+          wchar_t text[256];
+          GetWindowTextW(hwnd, text, int(std::size(text)));
+          if (search->title == text) {
+            search->found = hwnd;
+            return FALSE;
+          }
+          return TRUE;
+        },
+        reinterpret_cast<LPARAM>(&search));
+    return search.found;
+  }
+
+  rex::ui::WindowedAppContext& app_context_;
+  rex::ui::GraphicsProvider& provider_;
+  std::string title_;
+  std::unique_ptr<rex::ui::Window> window_;
+  std::unique_ptr<rex::ui::Presenter> presenter_;
+  std::unique_ptr<rex::ui::ImmediateDrawer> immediate_drawer_;
+  std::unique_ptr<rex::ui::ImGuiDrawer> imgui_drawer_;
+  std::unique_ptr<DeveloperUi> dialog_;
+  HWND hwnd_ = nullptr;
+  bool visible_ = false;
+};
+
+rex::ui::WindowedAppContext* g_app_context = nullptr;
+std::function<rex::ui::GraphicsProvider*()> g_provider;
+std::string g_title;
+std::unique_ptr<ConsoleWindow> g_console_window;
+std::atomic<bool> g_console_window_failed{false};
+
+bool ConsoleInOwnWindow() {
+  return REXCVAR_GET(bo1_console_window) && g_app_context && g_provider &&
+         !g_console_window_failed.load();
+}
+
+// Shows or hides the console window to match g_console_open (from any thread).
+void RequestConsoleWindowVisibility() {
+  if (!ConsoleInOwnWindow()) return;
+  g_app_context->CallInUIThread([] {
+    if (!ConsoleInOwnWindow()) return;
+    if (!g_console_window && g_console_open) {
+      rex::ui::GraphicsProvider* provider = g_provider();
+      if (provider) {
+        g_console_window = std::make_unique<ConsoleWindow>(*g_app_context, *provider, g_title);
+      }
+      if (!g_console_window || !g_console_window->Create()) {
+        // Fall back to the console inside the game window.
+        REXLOG_WARN("bo1: could not open the developer console window, using the in-game one");
+        g_console_window.reset();
+        g_console_window_failed = true;
+        if (g_ui) g_ui->MarkOpened(-1);
+        return;
+      }
+    }
+    if (g_console_window) g_console_window->SetVisible(g_console_open);
+  });
+}
+
 }  // namespace
 
-std::unique_ptr<rex::ui::ImGuiDialog> CreateUi(rex::ui::ImGuiDrawer* drawer, const char* title) {
-  auto ui = std::make_unique<DeveloperUi>(drawer, title);
+std::unique_ptr<rex::ui::ImGuiDialog> CreateUi(
+    rex::ui::ImGuiDrawer* drawer, const char* title, rex::ui::WindowedAppContext* app_context,
+    std::function<rex::ui::GraphicsProvider*()> provider) {
+  g_app_context = app_context;
+  g_provider = std::move(provider);
+  g_title = title;
+  auto ui = std::make_unique<DeveloperUi>(drawer, title, false);
   g_ui = ui.get();
   return ui;
 }
+
+void DestroyConsoleWindow() { g_console_window.reset(); }
 
 void ToggleConsole() {
   bool open = !g_console_open.load();
   if (open && g_ui) g_ui->MarkOpened(-1);
   g_console_open = open;
+  RequestConsoleWindowVisibility();
 }
 
 void OpenConsole(const std::string& tab) {
@@ -759,10 +949,21 @@ void OpenConsole(const std::string& tab) {
   }
   if (g_ui) g_ui->MarkOpened(index);
   g_console_open = true;
+  RequestConsoleWindowVisibility();
+  if (g_app_context && ConsoleInOwnWindow()) {
+    // The window (and its dialog) may only exist once the request above has run.
+    g_app_context->CallInUIThread([index] {
+      if (g_console_window && g_console_window->dialog()) {
+        g_console_window->dialog()->MarkOpened(index);
+      }
+    });
+  }
 }
 
 void ToggleOverlay() { g_overlay_visible = !g_overlay_visible.load(); }
 
-bool ConsoleOpen() { return g_console_open.load(); }
+// The game window only loses its input while the console is drawn on top of it; the separate
+// window has its own keyboard focus.
+bool ConsoleOpen() { return g_console_open.load() && !ConsoleInOwnWindow(); }
 
 }  // namespace bo1::debug

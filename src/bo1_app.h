@@ -156,11 +156,20 @@ class Bo1App : public rex::ReXApp {
 
   void OnCreateDialogs(rex::ui::ImGuiDrawer* drawer) override {
     window()->SetTitle(BO1_WINDOW_TITLE);
-    ui_ = bo1::debug::CreateUi(drawer, BO1_WINDOW_TITLE);
+    auto graphics_provider = [this]() -> rex::ui::GraphicsProvider* {
+      auto* graphics = runtime() ? runtime()->graphics_system() : nullptr;
+      return graphics ? graphics->provider() : nullptr;
+    };
+    ui_ = bo1::debug::CreateUi(drawer, BO1_WINDOW_TITLE, &app_context(), graphics_provider);
     rex::ui::RegisterBind("bind_bo1_console", "F1", "Developer console",
                           [] { bo1::debug::ToggleConsole(); });
     rex::ui::RegisterBind("bind_bo1_overlay", "F2", "Compact debug overlay",
                           [] { bo1::debug::ToggleOverlay(); });
+    // Borderless fullscreen at the monitor's own resolution (ReXApp applies the option).
+    rex::ui::RegisterBind("bind_bo1_fullscreen", "F11", "Toggle fullscreen", [] {
+      const bool fullscreen = rex::cvar::Query<bool>("fullscreen");
+      rex::cvar::SetFlagByName("fullscreen", fullscreen ? "false" : "true");
+    });
     rex::ui::RegisterBind("bind_bo1_screenshot", "F12", "Screenshot of the game image", [this] {
       SYSTEMTIME t;
       GetLocalTime(&t);
@@ -195,6 +204,7 @@ class Bo1App : public rex::ReXApp {
   void OnShutdown() override {
     timeEndPeriod(1);
     bo1::StopTimedCaptures();
+    bo1::debug::DestroyConsoleWindow();
     ui_.reset();
   }
 

@@ -503,9 +503,112 @@ uint64_t FrameCount() { return g_frame_count.load(std::memory_order_relaxed); }
 // the original executable only to dump the Title Update one) has other functions there: it leaves
 // the engine alone.
 
+#if !defined(BO1_BOOTSTRAP)
+
+namespace {
+
+// Native FindNameInTable (sub_8242EF88 campaign / sub_82465CE8 multiplayer): looks a name up in one
+// of the engine's field tables, which the entity spawner uses for every key of every spawned
+// entity ("classname", "spawnflags"...). The translated loop calls the translated case-insensitive
+// compare for each entry, and spawning many entities at once (zombie rounds, map changes) spent
+// tens of milliseconds there.
+//   r3 = name, r4 = int* out, r5 = table index; tables at kTables + index * 88.
+//   Entry: name, NUL, u16 value, s8 extra. Found: returns the value and writes the extra (sign
+//   extended) to *out. Not found: returns 0 and leaves *out alone.
+// Same comparison as the game's (sub_82385600): ASCII 'A'-'Z' fold to lower case, bytes compared
+// unsigned; a null name never matches.
+void FindNameInTable(PPCContext& ctx, uint8_t* base, uint32_t tables) {
+  const uint32_t name = ctx.r3.u32;
+  const uint32_t out = ctx.r4.u32;
+  const uint32_t index = ctx.r5.u32;
+  // Guest address to host, as the translated code does it (the 0xE0000000+ physical view is
+  // mapped 4 KB further on Windows).
+  auto host = [base](uint32_t address) {
+    return base + address + (address >= 0xE0000000u ? 0x1000u : 0u);
+  };
+  auto byte = [&host](uint32_t address) { return *host(address); };
+  auto fold = [](uint8_t c) { return uint8_t(c >= 'A' && c <= 'Z' ? c + 0x20 : c); };
+  const uint8_t* table_pointer = host(tables + index * 88);
+  uint32_t entry = uint32_t(table_pointer[0]) << 24 | uint32_t(table_pointer[1]) << 16 |
+                   uint32_t(table_pointer[2]) << 8 | table_pointer[3];
+  ctx.r3.u64 = 0;
+  if (!byte(entry)) return;
+  while (true) {
+    uint32_t length = 0;
+    while (byte(entry + length)) ++length;
+    bool equal = name != 0;
+    for (uint32_t i = 0; equal; ++i) {
+      const uint8_t a = fold(byte(name + i));
+      const uint8_t b = fold(byte(entry + i));
+      if (a != b) equal = false;
+      if (!a) break;
+    }
+    if (equal) {
+      const uint32_t value = entry + length + 1;
+      ctx.r3.u64 = (uint32_t(byte(value)) << 8) | byte(value + 1);
+      const uint32_t extra = uint32_t(int32_t(int8_t(byte(value + 2))));
+      uint8_t* out_pointer = host(out);
+      out_pointer[0] = uint8_t(extra >> 24);
+      out_pointer[1] = uint8_t(extra >> 16);
+      out_pointer[2] = uint8_t(extra >> 8);
+      out_pointer[3] = uint8_t(extra);
+      return;
+    }
+    entry += length + 4;
+    if (!byte(entry)) return;
+  }
+}
+
+// The first calls run both the native lookup and the translated original and compare them (return
+// value and the int it writes). Any difference switches back to the original for good.
+constexpr int kFindNameChecks = 5000;
+std::atomic<int> g_find_name_checks{kFindNameChecks};
+std::atomic<bool> g_find_name_native{true};
+
+void CheckedFindNameInTable(PPCContext& ctx, uint8_t* base, uint32_t tables,
+                            bo1::engine::GuestFn original) {
+  if (!g_find_name_native.load(std::memory_order_relaxed)) {
+    original(ctx, base);
+    return;
+  }
+  if (g_find_name_checks.load(std::memory_order_relaxed) <= 0) {
+    FindNameInTable(ctx, base, tables);
+    return;
+  }
+  const uint32_t out = ctx.r4.u32;
+  auto* out_host = base + out + (out >= 0xE0000000u ? 0x1000u : 0u);
+  uint8_t before[4];
+  std::memcpy(before, out_host, 4);
+  PPCContext native = ctx;
+  FindNameInTable(native, base, tables);
+  uint8_t native_out[4];
+  std::memcpy(native_out, out_host, 4);
+  std::memcpy(out_host, before, 4);
+  original(ctx, base);
+  if (native.r3.u32 != ctx.r3.u32 || std::memcmp(native_out, out_host, 4) != 0) {
+    g_find_name_native = false;
+    REXLOG_ERROR("bo1: native FindNameInTable differs from the game's (table {}, returned {:#x} "
+                 "instead of {:#x}); using the game's",
+                 ctx.r5.u32, native.r3.u32, ctx.r3.u32);
+    return;
+  }
+  if (g_find_name_checks.fetch_sub(1, std::memory_order_relaxed) == 1) {
+    REXLOG_INFO("bo1: native FindNameInTable matched the game's in {} calls", kFindNameChecks);
+  }
+}
+
+}  // namespace
+
+#endif
+
 #if defined(BO1_BOOTSTRAP)
 // No engine hooks.
 #elif defined(BO1_MP)
+
+REX_EXTERN(__imp__sub_82465CE8);
+REX_HOOK_RAW(sub_82465CE8) {
+  CheckedFindNameInTable(ctx, base, 0x83EE9380, __imp__sub_82465CE8);
+}
 
 REX_EXTERN(__imp__sub_82343D60);
 REX_EXTERN(__imp__sub_8233E8D8);
@@ -522,6 +625,11 @@ REX_HOOK_RAW(sub_82341CA8) {
 }
 
 #else
+
+REX_EXTERN(__imp__sub_8242EF88);
+REX_HOOK_RAW(sub_8242EF88) {
+  CheckedFindNameInTable(ctx, base, 0x83A0F180, __imp__sub_8242EF88);
+}
 
 REX_EXTERN(__imp__sub_82315590);
 REX_EXTERN(__imp__sub_8230FD58);

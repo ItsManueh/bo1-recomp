@@ -5,12 +5,41 @@ frame, and at the end compares the hitches with the normal frames.
 
 Usage: python tools/stutter_report.py samples.tsv logs/match.log [threads]
   threads: name parts separated by commas (default "Main,GPU Commands,Backend,Server").
+Game functions are shown with the names from config/symbols_tu11.toml (campaign) or
+config/symbols_mp_tu11.toml (multiplayer, when the log is of bo1mp), see tools/name_functions.py.
 """
 
 import collections
 import datetime
+import os
 import re
 import sys
+
+SYMBOL = re.compile(r'^0x([0-9A-F]{8}) = "([^"]+)"')
+GUEST = re.compile(r"sub_([0-9A-F]{8})")
+NAMES = {}
+
+
+def load_symbols(log_path):
+    """Names of the game functions for the executable that wrote the log."""
+    is_mp = False
+    with open(log_path, encoding="utf-8", errors="replace") as f:
+        for _, line in zip(range(200), f):
+            if "bo1mp" in line or "Multiplayer" in line:
+                is_mp = True
+                break
+    config = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "config")
+    path = os.path.join(config, "symbols_mp_tu11.toml" if is_mp else "symbols_tu11.toml")
+    if os.path.exists(path):
+        for line in open(path, encoding="utf-8"):
+            m = SYMBOL.match(line)
+            if m:
+                NAMES[m.group(1)] = m.group(2)
+
+
+def named(text):
+    return GUEST.sub(lambda m: f"sub_{m.group(1)}[{NAMES[m.group(1)]}]"
+                     if m.group(1) in NAMES else m.group(0), text)
 
 OS_MODULES = ("ntdll!", "KERNELBASE!", "kernel32!", "KERNEL32!", "win32u!", "VCRUNTIME140!",
               "ucrtbase!", "MSVCP140!", "msvcp_win!")
@@ -25,7 +54,7 @@ def signature(stack):
     guest = next((f for f in useful if "sub_8" in f), None)
     if guest and guest not in head:
         head.append(guest)
-    names = [f.split("!", 1)[-1].replace("rex::graphics::", "").replace("rex::", "")
+    names = [named(f.split("!", 1)[-1].replace("rex::graphics::", "").replace("rex::", ""))
              for f in head]
     return " < ".join(names) if names else frames[0] if frames else "?"
 
@@ -35,6 +64,7 @@ def main():
         print(__doc__)
         return 1
     wanted = (sys.argv[3] if len(sys.argv) > 3 else "Main,GPU Commands,Backend,Server").split(",")
+    load_symbols(sys.argv[2])
 
     samples = collections.defaultdict(list)  # thread -> [(ms, signature)]
     with open(sys.argv[1], encoding="utf-8", errors="replace") as f:

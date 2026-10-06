@@ -5,6 +5,7 @@
 
 #include <array>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <string>
 #include <vector>
@@ -12,6 +13,11 @@
 namespace rex::ui {
 class ImGuiDialog;
 class ImGuiDrawer;
+}  // namespace rex::ui
+
+namespace rex::ui {
+class GraphicsProvider;
+class WindowedAppContext;
 }  // namespace rex::ui
 
 namespace bo1::debug {
@@ -86,12 +92,20 @@ std::vector<ThreadUsage> GetThreadUsage();
 std::vector<std::pair<std::string, bool>> GetNotices();  // text, is_error
 
 // --- In-game UI (bo1_debug_ui.cpp) ---------------------------------------------------------------
-std::unique_ptr<rex::ui::ImGuiDialog> CreateUi(rex::ui::ImGuiDrawer* drawer, const char* title);
+// app_context and provider (asked for when the console first opens: the graphics system may not
+// exist yet when the dialogs are created) let the developer console open in a window of its own
+// (bo1_console_window); without them it is drawn inside the game window.
+std::unique_ptr<rex::ui::ImGuiDialog> CreateUi(
+    rex::ui::ImGuiDrawer* drawer, const char* title, rex::ui::WindowedAppContext* app_context,
+    std::function<rex::ui::GraphicsProvider*()> provider);
+// Closes the separate console window; call from the UI thread before the graphics shut down.
+void DestroyConsoleWindow();
 void ToggleConsole();
 // Opens the developer console on a tab ("console", "performance", "loading", "engine", "dvars").
 void OpenConsole(const std::string& tab);
 void ToggleOverlay();
-// True while the developer console has the keyboard: the game must not receive input.
+// True while the developer console is drawn over the game window and has its keyboard: the game
+// must not receive input.
 bool ConsoleOpen();
 
 }  // namespace bo1::debug

@@ -8,7 +8,7 @@
 
 #include <rex/cvar.h>
 
-REXCVAR_DECLARE(int32_t, bo1_internal_resolution);
+REXCVAR_DECLARE(std::string, bo1_resolution);
 REXCVAR_DECLARE(std::string, bo1_upscaler);
 REXCVAR_DECLARE(std::string, bo1_antialiasing);
 REXCVAR_DECLARE(std::string, bo1_aspect_ratio);
@@ -18,6 +18,9 @@ REXCVAR_DECLARE(std::string, bo1_shadows);
 REXCVAR_DECLARE(std::string, bo1_lod);
 
 namespace bo1::graphics {
+
+// Multiple of the console resolution (960x544) the game is rendered at, from bo1_resolution.
+int32_t ResolutionScale();
 
 // Maps the port options onto the runtime and GPU options. Call after the GPU plugin is loaded
 // and bo1.toml has been read (they take effect when the graphics system starts).

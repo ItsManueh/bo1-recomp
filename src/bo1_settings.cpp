@@ -34,6 +34,10 @@ REXCVAR_DEFINE_BOOL(bo1_console, false, "Black Ops",
                     "developer console, F1, is always available)")
     .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
 
+REXCVAR_DEFINE_BOOL(bo1_console_window, true, "Black Ops",
+                    "Open the developer console (F1) in a window of its own, next to the game "
+                    "window (false: draw it over the game image)");
+
 REXCVAR_DEFINE_STRING(bo1_console_level, "info", "Black Ops",
                       "Minimum level of the messages shown by the developer consoles")
     .allowed({"trace", "debug", "info", "warn", "error"});
@@ -83,7 +87,7 @@ namespace {
 constexpr std::array<std::pair<std::string_view, std::string_view>, 3> kConfigDefaults{{
     {"log_level", "\"info\""},
     {"gpu_plugin", "\"xenos\""},
-    // Always windowed.
+    // Starts windowed; F11 switches to borderless fullscreen at the monitor's resolution.
     {"fullscreen", "false"},
 }};
 

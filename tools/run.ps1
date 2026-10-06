@@ -45,7 +45,10 @@ if (-not $RealProfile) {
     New-Item -ItemType Directory -Force $testProfile | Out-Null
     $sharedCache = Join-Path ([Environment]::GetFolderPath('UserProfile')) 'Saved Games\Call of Duty Black Ops (recompiled)\cache'
     $argList += "`"--user_data_root=$testProfile`""
-    if (Test-Path $sharedCache) { $argList += "`"--cache_root=$sharedCache`"" }
+    # An explicit --cache_root in -Extra wins (a repeated option makes the later ones be ignored).
+    if ((Test-Path $sharedCache) -and ($Extra -notmatch '--cache_root')) {
+        $argList += "`"--cache_root=$sharedCache`""
+    }
 }
 # Start-Process joins the arguments with spaces: the ones with spaces go in quotes.
 if ($Exec) { $argList += "`"--bo1_test_exec=$Exec`""; $argList += "--bo1_test_exec_delay=$ExecDelay" }

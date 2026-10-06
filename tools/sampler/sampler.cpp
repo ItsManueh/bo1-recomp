@@ -268,8 +268,25 @@ int main(int argc, char** argv) {
     return s.find("!__imp__sub_") != std::string::npos || s.find("!sub_8") != std::string::npos;
   };
 
+  // Source line of an address ("file:line"), for the hottest top-of-stack lines.
+  std::unordered_map<DWORD64, std::string> line_cache;
+  auto resolve_line = [&](DWORD64 addr) -> const std::string& {
+    auto it = line_cache.find(addr);
+    if (it != line_cache.end()) return it->second;
+    IMAGEHLP_LINE64 line{sizeof(line)};
+    DWORD disp = 0;
+    std::string text = resolve(addr);
+    if (SymGetLineFromAddr64(process, addr, &disp, &line) && line.FileName) {
+      std::string file = line.FileName;
+      size_t slash = file.find_last_of("\\/");
+      if (slash != std::string::npos) file = file.substr(slash + 1);
+      text += " (" + file + ":" + std::to_string(line.LineNumber) + ")";
+    }
+    return line_cache.emplace(addr, std::move(text)).first->second;
+  };
+
   uint64_t total = 0;
-  std::map<std::string, uint32_t> by_top, by_runtime, by_guest, by_pair;
+  std::map<std::string, uint32_t> by_top, by_runtime, by_guest, by_pair, by_line, inclusive;
   std::printf("\nRounds: %llu in %d s\n", (unsigned long long)rounds, seconds);
   for (DWORD tid : hot) {
     auto& ti = threads[tid];
@@ -278,6 +295,16 @@ int main(int argc, char** argv) {
       if (!st.n) continue;
       ++total;
       by_top[resolve(st.pc[0])]++;
+      by_line[resolve_line(st.pc[0])]++;
+      // Inclusive: every function on the stack, once per sample.
+      std::vector<const std::string*> seen;
+      for (int i = 0; i < st.n; ++i) {
+        const std::string& f = resolve(st.pc[i]);
+        if (std::find(seen.begin(), seen.end(), &f) == seen.end()) {
+          seen.push_back(&f);
+          inclusive[f]++;
+        }
+      }
       std::string first_runtime, first_guest;
       for (int i = 0; i < st.n; ++i) {
         const auto& f = resolve(st.pc[i]);
@@ -346,6 +373,8 @@ int main(int argc, char** argv) {
     }
   }
   Print("Top of the stack (all hot threads)", by_top, total, 25);
+  Print("Top of the stack by source line", by_line, total, 40);
+  Print("Inclusive (function anywhere on the stack)", inclusive, total, 60);
   Print("First runtime function on the stack", by_runtime, total, 25);
   Print("First game function on the stack", by_guest, total, 25);
   Print("Game -> runtime pairs", by_pair, total, 30);

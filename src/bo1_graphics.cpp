@@ -7,14 +7,28 @@
 
 #include "bo1_graphics.h"
 
+#include <algorithm>
+
 #include <fmt/format.h>
 #include <rex/logging.h>
 
-REXCVAR_DEFINE_INT32(bo1_internal_resolution, 1, "Black Ops",
-                     "Internal rendering resolution as a multiple of the console one (960x544): "
-                     "1 = original, 2 = 1920x1088, 3 = 2880x1632. The HUD, menus and every effect "
-                     "are drawn at this resolution; 2 and 3 need a much faster GPU for 60 FPS")
-    .range(1, 3)
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+
+// The game renders its 3D scene at 960x544 because the console's 10 MB of EDRAM holds no more; the
+// port renders every draw at an integer multiple of it, so the HUD, menus, effects and render
+// targets are all native at the chosen size (no upscaling of a small image).
+REXCVAR_DEFINE_STRING(bo1_resolution, "console", "Black Ops",
+                      "Rendering resolution: console (960x544, the original), 1080p (1920x1088), "
+                      "1440p (2880x1632, shown downscaled on a 1440p screen), 4k (3840x2176) or "
+                      "auto (the smallest of them that covers the monitor). Every step up needs "
+                      "a much faster GPU for 60 FPS")
+    .allowed({"console", "1080p", "1440p", "4k", "auto"})
     .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
 
 REXCVAR_DEFINE_STRING(bo1_upscaler, "fsr", "Black Ops",
@@ -35,10 +49,10 @@ REXCVAR_DEFINE_BOOL(bo1_stretch, false, "Black Ops",
     .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
 
 REXCVAR_DEFINE_STRING(bo1_antialiasing, "smaa_ultra", "Black Ops",
-                      "Edge smoothing of the final image (the game's own 2x/4x MSAA always stays on): "
-                      "smaa_ultra (color edges, finds the most edges), smaa (brightness edges), "
-                      "fxaa (cheapest, softer) or off. For a cleaner image still, raise "
-                      "bo1_internal_resolution")
+                      "Edge smoothing of the final image (the game's own 2x/4x MSAA always stays "
+                      "on): smaa_ultra (color edges, finds the most edges), smaa (brightness "
+                      "edges), fxaa (cheapest, softer) or off. For a cleaner image still, raise "
+                      "bo1_resolution")
     .allowed({"smaa_ultra", "smaa", "fxaa", "off"})
     .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
 
@@ -61,8 +75,37 @@ REXCVAR_DEFINE_STRING(bo1_lod, "high", "Black Ops",
 
 namespace bo1::graphics {
 
+namespace {
+
+constexpr int32_t kConsoleHeight = 544;
+
+// Height in pixels of the primary monitor's current mode (physical pixels, whatever the DPI
+// scaling); 0 if unknown.
+int32_t PrimaryMonitorHeight() {
+  DEVMODEW mode{};
+  mode.dmSize = sizeof(mode);
+  if (!EnumDisplaySettingsW(nullptr, ENUM_CURRENT_SETTINGS, &mode)) return 0;
+  return int32_t(mode.dmPelsHeight);
+}
+
+}  // namespace
+
+int32_t ResolutionScale() {
+  const std::string& option = REXCVAR_GET(bo1_resolution);
+  if (option == "1080p") return 2;
+  if (option == "1440p") return 3;
+  if (option == "4k") return 4;
+  if (option == "auto") {
+    // Smallest multiple of 544 lines that covers the monitor (1080p -> 2, 1440p -> 3, 4K -> 4).
+    const int32_t height = PrimaryMonitorHeight();
+    if (height <= 0) return 1;
+    return std::clamp((height + kConsoleHeight - 1) / kConsoleHeight, 1, 4);
+  }
+  return 1;
+}
+
 void ApplyRuntimeOptions() {
-  const int32_t scale = REXCVAR_GET(bo1_internal_resolution);
+  const int32_t scale = ResolutionScale();
   for (const char* name : {"draw_resolution_scale_x", "draw_resolution_scale_y"}) {
     rex::cvar::SetFlagByName(name, fmt::format("{}", scale));
   }
@@ -82,9 +125,10 @@ void ApplyRuntimeOptions() {
   // anisotropic_override: -1 = as the game asks, 5 = 16x.
   rex::cvar::SetFlagByName("anisotropic_override",
                            REXCVAR_GET(bo1_texture_filtering) == "16x" ? "5" : "-1");
-  REXLOG_INFO("bo1: graphics: internal resolution {}x{}, antialiasing {}, upscaler {}, aspect "
+  REXLOG_INFO("bo1: graphics: resolution {} = {}x{}, antialiasing {}, upscaler {}, aspect "
               "{}{}, textures {}, shadows {}, level of detail {}",
-              960 * scale, 544 * scale, antialiasing, REXCVAR_GET(bo1_upscaler),
+              REXCVAR_GET(bo1_resolution), 960 * scale, 544 * scale, antialiasing,
+              REXCVAR_GET(bo1_upscaler),
               REXCVAR_GET(bo1_aspect_ratio),
               REXCVAR_GET(bo1_stretch) ? " stretched" : "", REXCVAR_GET(bo1_texture_filtering),
               REXCVAR_GET(bo1_shadows), REXCVAR_GET(bo1_lod));

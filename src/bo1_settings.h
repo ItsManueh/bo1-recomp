@@ -15,6 +15,7 @@ REXCVAR_DECLARE(int32_t, bo1_backup_count);
 // Debugging and developer mode.
 REXCVAR_DECLARE(bool, bo1_dev_mode);
 REXCVAR_DECLARE(std::string, bo1_dev_commands);
+REXCVAR_DECLARE(bool, bo1_console_window);
 REXCVAR_DECLARE(bool, bo1_console);
 REXCVAR_DECLARE(std::string, bo1_console_level);
 REXCVAR_DECLARE(bool, bo1_overlay);
