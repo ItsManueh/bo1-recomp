@@ -68,6 +68,15 @@ REXCVAR_DEFINE_STRING(bo1_shadows, "high", "Black Ops",
                       "those engine variables as cheats")
     .allowed({"console", "high"});
 
+// cg_fov is the horizontal field of view of a 4:3 view (wider views see more to the sides); it is
+// not protected as a cheat in multiplayer either. The game sets it back to 65 when it loads the
+// profile and when the player spawns, and scripted scenes set other values for a while, so the
+// engine hook reapplies the option only when the dvar is back at 65 (FieldOfViewCommand).
+REXCVAR_DEFINE_INT32(bo1_fov, 65, "Black Ops",
+                     "Field of view in degrees: 65 is the console's; up to 90 shows more around "
+                     "the player (wider views also make the weapon look smaller)")
+    .range(65, 90);
+
 REXCVAR_DEFINE_STRING(bo1_lod, "high", "Black Ops",
                       "Model level of detail: console or high (detailed models are kept further "
                       "away, less pop-in)")
@@ -132,6 +141,13 @@ void ApplyRuntimeOptions() {
               REXCVAR_GET(bo1_aspect_ratio),
               REXCVAR_GET(bo1_stretch) ? " stretched" : "", REXCVAR_GET(bo1_texture_filtering),
               REXCVAR_GET(bo1_shadows), REXCVAR_GET(bo1_lod));
+}
+
+std::string FieldOfViewCommand(float current) {
+  constexpr float kConsoleFov = 65.0f;
+  const int32_t fov = REXCVAR_GET(bo1_fov);
+  if (fov == int32_t(kConsoleFov) || current != kConsoleFov) return {};
+  return fmt::format("cg_fov {}", fov);
 }
 
 std::vector<std::string> EngineCommands() {

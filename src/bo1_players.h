@@ -14,6 +14,10 @@ REXCVAR_DECLARE(std::string, bo1_keyboard_player);
 REXCVAR_DECLARE(std::string, bo1_split_screen_view);
 REXCVAR_DECLARE(bool, bo1_split_screen_boost);
 
+namespace rex::input {
+class InputSystem;
+}
+
 namespace bo1::players {
 
 // Maps the port options onto the runtime options (sign-in of players 2-4, device assignment).
@@ -37,5 +41,9 @@ bool Press(uint32_t user_index, const std::string& button, int hold_ms);
 // the game sees every change.
 bool InjectedInput(uint32_t user_index, uint16_t& buttons, uint8_t& left_trigger,
                    uint8_t& right_trigger, uint32_t& sequence);
+
+// Tests: connects bo1_test_pads virtual controllers (idle, driven only by Press), so split screen
+// can be tested on a PC without spare controllers. Call before the game polls its controllers.
+void AddTestPads(rex::input::InputSystem* input);
 
 }  // namespace bo1::players

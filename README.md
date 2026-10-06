@@ -41,8 +41,12 @@ The goal is preservation: keeping this version of the game playable on modern ha
   emulated GPU thread is prioritized while several views are drawn.
 - **Audio**: 5.1/7.1 output, a headphone virtualizer, measured output latency, subtitle option.
 - **Developer tools**: a developer console (F1) in its own window with performance, loading, engine
-  state and dvar tabs; a compact overlay on the game (F2); screenshots (F12); named game functions
-  (`config/symbols_*.toml`) in the profiling reports.
+  state, dvar and achievement tabs; a compact overlay on the game (F2); screenshots (F12); named
+  game functions (`config/symbols_*.toml`) in the profiling reports.
+- **Achievements**: unlocked like on the console, with a notification, saved with the profile and
+  listed in the developer console.
+- **Startup**: the shaders of previous sessions are compiled in the background instead of before
+  the game starts (no black window after a driver update); optional intro video skip.
 - **Kernel/system**: saves and profile in *Saved Games*, campaign <-> multiplayer switching,
   DLC installation, file streaming diagnostics, many fixes in the runtime.
 
@@ -162,6 +166,7 @@ that file; the main ones:
 | `bo1_frame_pacing` | `port` | `port` (precise limiter) or `console` |
 | `bo1_vsync` / `bo1_vrr` | `false` / `true` | PC vsync, variable refresh rate |
 | `bo1_shadows` / `bo1_lod` | `high` | `high` or `console` |
+| `bo1_fov` | `65` | field of view, 65 (console) to 90 |
 | `bo1_audio_output` | `auto` | `auto`, `stereo`, `headphones`, `5.1`, `7.1` |
 | `bo1_audio_latency` | `normal` | `normal` (~55 ms) or `low` (~35 ms) |
 | `bo1_subtitles` | `game` | `game`, `on`, `off` |
@@ -171,6 +176,7 @@ that file; the main ones:
 | `bo1_split_screen_boost` | `true` | higher priority for the emulated GPU thread in split screen |
 | `bo1_gamertag` / `bo1_player_names` | Windows user | names of player 1 and players 2-4 |
 | `bo1_console_window` | `true` | developer console in its own window (`false`: over the game) |
+| `bo1_skip_intro` | `false` | skip the logo video at startup |
 
 Keys: **F1** developer console, **F2** overlay, **F11** fullscreen, **F12** screenshot.
 
@@ -178,6 +184,9 @@ Keys: **F1** developer console, **F2** overlay, **F11** fullscreen, **F12** scre
 
 - `tools/run.ps1`: automated test runs (logs, timed screenshots, console commands such as
   `press <player> <button>` to drive the menus); uses a separate test profile.
+- `tools/split_test.ps1`, `tools/split_ab.ps1`, `tools/split_profile.ps1`: a two player split screen
+  match driven through the menus with virtual controllers (`--bo1_test_pads`), interleaved A/B
+  comparisons and a profile of the emulated GPU thread.
 - `tools/sampler/`: sampling profiler; `tools/stutter_report.py` crosses its samples with the
   hitches in the log.
 - `tools/campaign_sweep.ps1` + `tools/campaign_report.py`: loads every campaign mission and

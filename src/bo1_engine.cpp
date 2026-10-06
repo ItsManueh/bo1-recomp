@@ -7,6 +7,7 @@
 //                       campaign (default.xex)   multiplayer (default_mp.xex)
 //   Com_Frame           0x82315590               0x82343D60
 //   Cbuf_AddText        0x8230FD58               0x8233E8D8   (client, text)
+//   Dvar_RegisterBool   0x8237AE18               0x823E3E80   (name, value, flags, description)
 //   Com_Error           0x82313280               0x82341CA8   (code, format, ...)
 //   Dvar_FindVar        0x82379648               0x823E2768   (hash -> dvar_t*)
 //   dvar hash table     0x8334EE60               0x8399C600   (1024 buckets)
@@ -52,6 +53,9 @@
 #define NOMINMAX
 #endif
 #include <windows.h>
+
+REXCVAR_DEFINE_BOOL(bo1_skip_intro, false, "Black Ops",
+                    "Skip the logo video (Activision, Treyarch) the game plays when it starts");
 
 namespace bo1::engine {
 
@@ -252,6 +256,18 @@ void ForEachDvar(Visit&& visit) {
 
 // Runs the queued commands on the game main thread at the start of Com_Frame, where the engine
 // processes its own command buffer.
+// The game plays its logo video at startup while com_introPlayed is false, which is how it is
+// registered (the console keeps no config between runs). Registering it as true skips the video
+// the way the game itself does once it has been played; making the video file fail to open instead
+// leaves the game waiting for a fallback video forever.
+void OnRegisterBool(PPCContext& ctx, uint8_t* base) {
+  if (!REXCVAR_GET(bo1_skip_intro) || !ctx.r3.u32) return;
+  const char* name = reinterpret_cast<const char*>(base + ctx.r3.u32);
+  if (std::strcmp(name, "com_introPlayed") != 0) return;
+  ctx.r4.u64 = 1;
+  REXLOG_INFO("bo1: intro video skipped (bo1_skip_intro)");
+}
+
 void RunPendingCommands(PPCContext& ctx, uint8_t* base, GuestFn cbuf_add_text) {
   std::deque<std::string> commands;
   {
@@ -318,6 +334,10 @@ void FrameStart(PPCContext& ctx, uint8_t* base, GuestFn cbuf_add_text) {
   if (frame % kMapCheckFrames == 0) {
     if (auto views = FindDvar("r_num_viewports")) {
       players::OnViewCount(std::atoi(views->value.c_str()));
+    }
+    if (auto fov = FindDvar("cg_fov")) {
+      std::string command = graphics::FieldOfViewCommand(float(std::atof(fov->value.c_str())));
+      if (!command.empty()) ExecuteCommand(command);
     }
     auto map = FindDvar("mapname");
     std::string name = map ? map->value : std::string();
@@ -614,6 +634,12 @@ REX_EXTERN(__imp__sub_82343D60);
 REX_EXTERN(__imp__sub_8233E8D8);
 REX_EXTERN(__imp__sub_82341CA8);
 
+REX_EXTERN(__imp__sub_823E3E80);
+REX_HOOK_RAW(sub_823E3E80) {
+  bo1::engine::OnRegisterBool(ctx, base);
+  __imp__sub_823E3E80(ctx, base);
+}
+
 REX_HOOK_RAW(sub_82343D60) {
   bo1::engine::FrameStart(ctx, base, __imp__sub_8233E8D8);
   __imp__sub_82343D60(ctx, base);
@@ -634,6 +660,12 @@ REX_HOOK_RAW(sub_8242EF88) {
 REX_EXTERN(__imp__sub_82315590);
 REX_EXTERN(__imp__sub_8230FD58);
 REX_EXTERN(__imp__sub_82313280);
+
+REX_EXTERN(__imp__sub_8237AE18);
+REX_HOOK_RAW(sub_8237AE18) {
+  bo1::engine::OnRegisterBool(ctx, base);
+  __imp__sub_8237AE18(ctx, base);
+}
 
 REX_HOOK_RAW(sub_82315590) {
   bo1::engine::FrameStart(ctx, base, __imp__sub_8230FD58);

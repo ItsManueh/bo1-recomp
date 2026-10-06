@@ -14,6 +14,7 @@
 #include <imgui.h>
 #include <rex/audio/downmix.h>
 #include <rex/logging.h>
+#include <rex/system/kernel_state.h>
 #include <rex/ui/graphics_provider.h>
 #include <rex/ui/imgui_dialog.h>
 #include <rex/ui/imgui_drawer.h>
@@ -170,7 +171,8 @@ constexpr Toggle kToggles[] = {
     {"cg_drawGun", "Weapon (viewmodel)"},
 };
 
-constexpr const char* kTabNames[] = {"Console", "Performance", "Loading", "Engine", "Dvars"};
+constexpr const char* kTabNames[] = {"Console", "Performance", "Loading",
+                                     "Engine",  "Dvars",       "Achievements"};
 
 // Engine state shown in the Engine tab.
 constexpr const char* kWatchedDvars[] = {
@@ -307,7 +309,8 @@ class DeveloperUi final : public rex::ui::ImGuiDialog {
     static const DrawTab kDrawTabs[] = {&DeveloperUi::DrawConsoleTab,
                                         &DeveloperUi::DrawPerformanceTab,
                                         &DeveloperUi::DrawLoadingTab, &DeveloperUi::DrawEngineTab,
-                                        &DeveloperUi::DrawDvarsTab};
+                                        &DeveloperUi::DrawDvarsTab,
+                                        &DeveloperUi::DrawAchievementsTab};
     static_assert(std::size(kDrawTabs) == std::size(kTabNames));
     if (ImGui::BeginTabBar("##tabs")) {
       for (int i = 0; i < int(std::size(kTabNames)); ++i) {
@@ -681,6 +684,81 @@ class DeveloperUi final : public rex::ui::ImGuiDialog {
       rex::cvar::SetFlagByName("bo1_dev_mode", dev_mode ? "true" : "false");
     }
     ImGui::EndChild();
+  }
+
+  // Achievements tab: the title's achievements (from the executable's own metadata) and which of
+  // them this profile has unlocked. The runtime saves the unlocks with the profile and shows a
+  // notification when one is unlocked.
+  void DrawAchievementsTab() {
+    rex::system::KernelState* kernel = rex::system::kernel_state();
+    if (!kernel) {
+      ImGui::TextDisabled("Available once the game has started");
+      return;
+    }
+    const std::vector<rex::system::AchievementInfo> achievements = kernel->loaded_achievements();
+    if (achievements.empty()) {
+      ImGui::TextDisabled("This executable has no achievement metadata");
+      return;
+    }
+    uint32_t unlocked = 0, score = 0, total_score = 0;
+    for (const auto& achievement : achievements) {
+      total_score += achievement.gamerscore;
+      if (kernel->IsAchievementUnlocked(achievement.id)) {
+        ++unlocked;
+        score += achievement.gamerscore;
+      }
+    }
+    ImGui::TextColored(kAccent, "%u of %zu unlocked", unlocked, achievements.size());
+    ImGui::SameLine();
+    ImGui::TextDisabled("| %u of %u gamerscore", score, total_score);
+    if (!ImGui::BeginTable("##achievements", 4,
+                           ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY |
+                               ImGuiTableFlags_SizingStretchProp)) {
+      return;
+    }
+    ImGui::TableSetupScrollFreeze(0, 1);
+    ImGui::TableSetupColumn("Achievement", ImGuiTableColumnFlags_WidthStretch, 1.0f);
+    ImGui::TableSetupColumn("Description", ImGuiTableColumnFlags_WidthStretch, 2.2f);
+    ImGui::TableSetupColumn("G", ImGuiTableColumnFlags_WidthFixed, 34);
+    ImGui::TableSetupColumn("Unlocked", ImGuiTableColumnFlags_WidthFixed, 130);
+    ImGui::TableHeadersRow();
+    for (const auto& achievement : achievements) {
+      const bool is_unlocked = kernel->IsAchievementUnlocked(achievement.id);
+      ImGui::TableNextRow();
+      ImGui::TableNextColumn();
+      ImGui::TextColored(is_unlocked ? kGood : kMuted, "%s", achievement.label.c_str());
+      ImGui::TableNextColumn();
+      // Locked secret achievements show the text the console shows before unlocking them.
+      const std::string& description =
+          is_unlocked || achievement.unachieved_description.empty()
+              ? achievement.description
+              : achievement.unachieved_description;
+      ImGui::TextWrapped("%s", description.c_str());
+      ImGui::TableNextColumn();
+      ImGui::Text("%u", achievement.gamerscore);
+      ImGui::TableNextColumn();
+      if (is_unlocked) {
+        ImGui::TextUnformatted(FormatFileTime(kernel->GetAchievementUnlockTime(achievement.id)).c_str());
+      } else {
+        ImGui::TextDisabled("-");
+      }
+    }
+    ImGui::EndTable();
+  }
+
+  // Local date and time of an unlock (a Windows FILETIME), or just "yes" when it is not known.
+  static std::string FormatFileTime(uint64_t file_time) {
+    if (!file_time) return "yes";
+    FILETIME utc{DWORD(file_time), DWORD(file_time >> 32)};
+    FILETIME local;
+    SYSTEMTIME time;
+    if (!FileTimeToLocalFileTime(&utc, &local) || !FileTimeToSystemTime(&local, &time)) {
+      return "yes";
+    }
+    char text[32];
+    std::snprintf(text, sizeof(text), "%04u-%02u-%02u %02u:%02u", time.wYear, time.wMonth,
+                  time.wDay, time.wHour, time.wMinute);
+    return text;
   }
 
   // Dvars tab: every engine variable, filtered.

@@ -12,12 +12,17 @@ REXCVAR_DECLARE(std::string, bo1_resolution);
 REXCVAR_DECLARE(std::string, bo1_upscaler);
 REXCVAR_DECLARE(std::string, bo1_antialiasing);
 REXCVAR_DECLARE(std::string, bo1_aspect_ratio);
+REXCVAR_DECLARE(int32_t, bo1_fov);
 REXCVAR_DECLARE(bool, bo1_stretch);
 REXCVAR_DECLARE(std::string, bo1_texture_filtering);
 REXCVAR_DECLARE(std::string, bo1_shadows);
 REXCVAR_DECLARE(std::string, bo1_lod);
 
 namespace bo1::graphics {
+
+// Command that applies bo1_fov when the game has set cg_fov (now `current`) back to the console's
+// 65 degrees; empty when there is nothing to do.
+std::string FieldOfViewCommand(float current);
 
 // Multiple of the console resolution (960x544) the game is rendered at, from bo1_resolution.
 int32_t ResolutionScale();

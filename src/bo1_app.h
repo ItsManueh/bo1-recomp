@@ -198,6 +198,7 @@ class Bo1App : public rex::ReXApp {
       const bool ignore_input = REXCVAR_GET(bo1_test_ignore_input);
       input->SetActiveCallback(
           [ignore_input] { return !ignore_input && !bo1::debug::ConsoleOpen(); });
+      bo1::players::AddTestPads(input);
     }
   }
 
