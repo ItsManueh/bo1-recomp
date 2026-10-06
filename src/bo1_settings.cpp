@@ -94,7 +94,7 @@ constexpr std::array<std::pair<std::string_view, std::string_view>, 3> kConfigDe
 // GPU options with a different default in the port. They only exist once the plugin is loaded
 // and are applied when neither bo1.toml nor the command line sets them.
 // (Antialiasing at presentation is set by bo1_antialiasing, see bo1_graphics.cpp.)
-constexpr std::array<std::pair<std::string_view, std::string_view>, 3> kGpuDefaults{{
+constexpr std::array<std::pair<std::string_view, std::string_view>, 4> kGpuDefaults{{
     // The game already caps itself at 60 FPS with its own vsync (r_vsync, like the console). The
     // PC vsync added waits to presentation: in a match it dropped to 53-57 FPS. In a window
     // Windows composes the image, so there is no tearing.
@@ -107,6 +107,10 @@ constexpr std::array<std::pair<std::string_view, std::string_view>, 3> kGpuDefau
     // middle of the frame (the end of match screen dropped to ~25 FPS). This game does not need
     // it: the data stays in GPU memory, where the following draws use it.
     {"readback_memexport", "false"},
+    // Direct3D 12 command lists executed by a thread of their own. Off in the runtime because on
+    // a 6-core CPU the game threads that poll for work left it no core; with them sleeping
+    // (bo1_idle_sleep) split screen went from 45-51 to 54-57 FPS.
+    {"d3d12_async_submission", "true"},
 }};
 
 std::string TomlString(std::string_view s) {

@@ -8,6 +8,8 @@
 //   Com_Frame           0x82315590               0x82343D60
 //   Cbuf_AddText        0x8230FD58               0x8233E8D8   (client, text)
 //   Dvar_RegisterBool   0x8237AE18               0x823E3E80   (name, value, flags, description)
+//   WaitForSingleObject 0x824BE9F8               0x8256EDB8   (handle, milliseconds)
+//   job queue: run one  0x82533240               0x825E38A8   (-> 1 if a job ran, else yields)
 //   Com_Error           0x82313280               0x82341CA8   (code, format, ...)
 //   Dvar_FindVar        0x82379648               0x823E2768   (hash -> dvar_t*)
 //   dvar hash table     0x8334EE60               0x8399C600   (1024 buckets)
@@ -53,6 +55,11 @@
 #define NOMINMAX
 #endif
 #include <windows.h>
+
+REXCVAR_DEFINE_BOOL(bo1_idle_sleep, true, "Black Ops",
+                    "Game threads that wait for work sleep instead of polling in a loop, leaving "
+                    "the CPU cores to the emulated GPU (more frames per second in split screen)")
+    .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
 
 REXCVAR_DEFINE_BOOL(bo1_skip_intro, false, "Black Ops",
                     "Skip the logo video (Activision, Treyarch) the game plays when it starts");
@@ -266,6 +273,71 @@ void OnRegisterBool(PPCContext& ctx, uint8_t* base) {
   if (std::strcmp(name, "com_introPlayed") != 0) return;
   ctx.r4.u64 = 1;
   REXLOG_INFO("bo1: intro video skipped (bo1_skip_intro)");
+}
+
+// --- Idle game threads ----------------------------------------------------------------------------
+//
+// On the console every game thread has a hardware thread of its own and the game waits for work by
+// polling: the two job queue workers call SwitchToThread in a loop while their queues are empty
+// (~55,000 times per second each) and other threads poll events with a zero timeout (~54,000 times
+// per second in a split screen match). On a PC those loops keep busy the cores the emulated GPU
+// needs. Sleeping instead, together with the runtime's asynchronous GPU submission (which only has
+// a core to run on then), took split screen from 45-51 to 54-57 FPS on a 6-core CPU.
+
+// Job queue workers: after 2 ms without a job (the burst of the frame is over), each empty poll
+// sleeps 0.1 ms, so a new job waits at most that long.
+constexpr auto kWorkerIdleBeforeSleep = std::chrono::milliseconds(2);
+constexpr int64_t kWorkerIdleSleepUs = 100;
+// Event polls: after this many timeouts in a row on the same handle, a poll waits up to 1 ms for
+// it (returning as soon as it is signaled) instead of returning at once.
+constexpr uint32_t kPollTimeoutsBeforeWait = 256;
+constexpr uint32_t kStatusTimeout = 0x102;
+
+void SleepMicroseconds(int64_t microseconds) {
+  thread_local HANDLE timer = CreateWaitableTimerExW(
+      nullptr, nullptr, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, TIMER_ALL_ACCESS);
+  if (!timer) return;  // older Windows: keep polling
+  LARGE_INTEGER due;
+  due.QuadPart = -microseconds * 10;  // relative, in 100 ns units
+  if (SetWaitableTimer(timer, &due, 0, nullptr, nullptr, FALSE)) {
+    ::WaitForSingleObject(timer, INFINITE);
+  }
+}
+
+// Job queue "run one job" (returns in r3 whether a job ran).
+void RunOneJob(PPCContext& ctx, uint8_t* base, GuestFn original) {
+  thread_local auto last_job = std::chrono::steady_clock::now();
+  original(ctx, base);
+  if (!REXCVAR_GET(bo1_idle_sleep)) return;
+  const auto now = std::chrono::steady_clock::now();
+  if (ctx.r3.u32 & 0xFF) {
+    last_job = now;
+  } else if (now - last_job > kWorkerIdleBeforeSleep) {
+    SleepMicroseconds(kWorkerIdleSleepUs);
+  }
+}
+
+// WaitForSingleObject(handle, milliseconds).
+void GuestWaitForSingleObject(PPCContext& ctx, uint8_t* base, GuestFn original) {
+  thread_local uint32_t poll_handle = 0;
+  thread_local uint32_t poll_timeouts = 0;
+  const uint32_t handle = ctx.r3.u32;
+  const bool poll = ctx.r4.u32 == 0;
+  if (poll && REXCVAR_GET(bo1_idle_sleep) && handle == poll_handle &&
+      poll_timeouts >= kPollTimeoutsBeforeWait) {
+    ctx.r4.u64 = 1;
+  }
+  original(ctx, base);
+  if (!poll) return;
+  if (ctx.r3.u32 != kStatusTimeout) {
+    poll_timeouts = 0;
+    return;
+  }
+  if (handle != poll_handle) {
+    poll_handle = handle;
+    poll_timeouts = 0;
+  }
+  ++poll_timeouts;
 }
 
 void RunPendingCommands(PPCContext& ctx, uint8_t* base, GuestFn cbuf_add_text) {
@@ -634,6 +706,16 @@ REX_EXTERN(__imp__sub_82343D60);
 REX_EXTERN(__imp__sub_8233E8D8);
 REX_EXTERN(__imp__sub_82341CA8);
 
+REX_EXTERN(__imp__sub_825E38A8);
+REX_HOOK_RAW(sub_825E38A8) {
+  bo1::engine::RunOneJob(ctx, base, __imp__sub_825E38A8);
+}
+
+REX_EXTERN(__imp__sub_8256EDB8);
+REX_HOOK_RAW(sub_8256EDB8) {
+  bo1::engine::GuestWaitForSingleObject(ctx, base, __imp__sub_8256EDB8);
+}
+
 REX_EXTERN(__imp__sub_823E3E80);
 REX_HOOK_RAW(sub_823E3E80) {
   bo1::engine::OnRegisterBool(ctx, base);
@@ -660,6 +742,16 @@ REX_HOOK_RAW(sub_8242EF88) {
 REX_EXTERN(__imp__sub_82315590);
 REX_EXTERN(__imp__sub_8230FD58);
 REX_EXTERN(__imp__sub_82313280);
+
+REX_EXTERN(__imp__sub_82533240);
+REX_HOOK_RAW(sub_82533240) {
+  bo1::engine::RunOneJob(ctx, base, __imp__sub_82533240);
+}
+
+REX_EXTERN(__imp__sub_824BE9F8);
+REX_HOOK_RAW(sub_824BE9F8) {
+  bo1::engine::GuestWaitForSingleObject(ctx, base, __imp__sub_824BE9F8);
+}
 
 REX_EXTERN(__imp__sub_8237AE18);
 REX_HOOK_RAW(sub_8237AE18) {
