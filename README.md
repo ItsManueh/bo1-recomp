@@ -212,8 +212,7 @@ Keys: **F1** developer console, **F2** overlay, **F11** fullscreen, **F12** scre
 
 The port's own code, configuration and tools in this repository are released under the
 [MIT License](LICENSE). The license does not cover the game: its executables, data and the code
-generated from them belong to their owners and are never part of this repository. The ReXGlue SDK
-fork keeps its own BSD 3-Clause license.
+generated from them belong to their owners and are never part of this repository.
 
 ## Credits
 
